@@ -52,7 +52,6 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
-	// Type assert the currentUser to your User model
 	currentUser, ok := currentUserInterface.(models.User)
 	if !ok {
 		c.JSON(500, gin.H{"error": "Internal Server Error"})

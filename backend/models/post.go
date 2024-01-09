@@ -7,9 +7,10 @@ import (
 type Post struct {
 	gorm.Model
 	// PostId   int    `json:"postid"`
-	UserId  uint   `json:"userid" gorm:"primary_key References:users(ID)"`
-	Title   string `json:"title"`
-	Content string `json:"content"`
-	TagId   int    `json:"tagid"`
-	TopicId int    `json:"topicid"`
+	ID       uint   `json:"id" gorm:"primaryKey"`
+	UserId   uint   `json:"userid"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	TagId    *uint  `json:"tagid"`
+	ThreadId *uint  `json:"threadid"`
 }

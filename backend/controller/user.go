@@ -67,6 +67,7 @@ func CreateUser(c *gin.Context) {
 
 	user.Password = string(hashedPassword)
 	config.DB.Create(&user)
+	c.JSON(200, "User created")
 
 }
 
@@ -132,6 +133,25 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	currentUserInterface, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	currentUser, ok := currentUserInterface.(models.User)
+	if !ok {
+		c.JSON(500, gin.H{"error": "Internal Server Error"})
+		c.Abort()
+		return
+	}
+
+	if currentUser.ID != user.ID {
+		c.JSON(403, gin.H{"error": "Forbidden"})
+		c.Abort()
+		return
+	}
 	config.DB.Where("id =?", user.ID).First(&newData)
 	if newData.UserName != user.UserName && user.UserName != "" {
 		newData.UserName = user.UserName

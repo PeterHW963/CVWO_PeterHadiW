@@ -33,6 +33,26 @@ func UpdateComment(c *gin.Context) {
 		return
 	}
 
+	currentUserInterface, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	currentUser, ok := currentUserInterface.(models.User)
+	if !ok {
+		c.JSON(500, gin.H{"error": "Internal Server Error"})
+		c.Abort()
+		return
+	}
+
+	if currentUser.ID != uint(comment.UserId) {
+		c.JSON(403, gin.H{"error": "Forbidden"})
+		c.Abort()
+		return
+	}
+
 	config.DB.Where("id = ?", comment.ID).First(&newData)
 	if newData.Content != comment.Content && newData.Content != "" {
 		newData.Content = comment.Content

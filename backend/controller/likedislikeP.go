@@ -26,8 +26,8 @@ func GetTotalVotesPost(c *gin.Context) {
 func AddUpvotePost(c *gin.Context) {
 	upVote := models.LikeDislikePost{}
 	var data struct {
-		PostId int    `json:"postid"`
-		UserId int    `json:"userid"`
+		PostId uint   `json:"postid"`
+		UserId uint   `json:"userid"`
 		Status string `json:"status"`
 	}
 	c.ShouldBindJSON(&data)
@@ -60,8 +60,8 @@ func AddUpvotePost(c *gin.Context) {
 func AddDownvotePost(c *gin.Context) {
 	downVote := models.LikeDislikePost{}
 	var data struct {
-		PostId int    `json:"postid"`
-		UserId int    `json:"userid"`
+		PostId uint   `json:"postid"`
+		UserId uint   `json:"userid"`
 		Status string `json:"status"`
 	}
 	c.ShouldBindJSON(&data)

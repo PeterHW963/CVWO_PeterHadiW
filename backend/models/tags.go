@@ -6,5 +6,6 @@ import (
 
 type Tag struct {
 	gorm.Model
+	ID      uint   `json:"id" gorm:"primaryKey"`
 	TagName string `json:"tagname"`
 }

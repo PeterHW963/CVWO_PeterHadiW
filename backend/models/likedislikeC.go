@@ -6,7 +6,7 @@ import (
 
 type LikeDislikeComment struct {
 	gorm.Model
-	CommentId int    `json:"commentid"`
-	UserId    int    `json:"userid"`
+	CommentId uint   `json:"commentid"`
+	UserId    uint   `json:"userid"`
 	Status    string `json:"status"`
 }
