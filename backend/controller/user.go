@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/PeterHW963/CVWO/backend/config"
 	"github.com/PeterHW963/CVWO/backend/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -108,58 +110,151 @@ func Authenticate(c *gin.Context) {
 
 // delete user
 func DeleteUser(c *gin.Context) {
-	var data struct {
-		ID int `json:"id"`
+
+	type JWTToken struct {
+		TokenString string `json:"stringToken"`
+		ID          uint   `json:"id"`
 	}
 
-	c.ShouldBindJSON(&data)
-	var user models.User
-	var count int64
-	config.DB.Model(models.User{}).Where("id =?", data.ID).First(&user).Count(&count)
-	if count > 0 {
-		config.DB.Delete(&user)
-		c.JSON(200, user)
+	var token JWTToken
+	if err := c.ShouldBindBodyWith(&token, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, "user not found")
+
+	if token.TokenString == "" {
+		c.String(200, "couldnt get cookie")
+		return
+	}
+
+	result, err := jwt.Parse(token.TokenString, func(token *jwt.Token) (interface{}, error) {
+
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return []byte(os.Getenv("KEY")), nil
+
+	})
+
+	if err != nil {
+		c.String(200, "Token Parsing Failed")
+		return
+	}
+
+	var currentUser models.User
+	if claims, ok := result.Claims.(jwt.MapClaims); ok && result.Valid {
+		if float64(time.Now().Unix()) > claims["expires"].(float64) {
+			c.String(200, "Token expired")
+			return
+		}
+		var count int64
+		config.DB.First(&currentUser, "id=?", claims["subject"]).Count(&count)
+
+		if count == 0 {
+			c.String(200, "User not found")
+			c.Abort()
+			c.Redirect(http.StatusTemporaryRedirect, "/")
+			return
+		}
+	}
+
+	if currentUser.Role == "Admin" {
+
+		var user models.User
+		user.ID = token.ID
+		var count int64
+		config.DB.Model(models.User{}).Where("id = ?", token.ID).First(&user).Count(&count)
+		if count > 0 {
+			config.DB.Delete(&user)
+			c.JSON(200, user)
+			return
+		}
+		c.JSON(200, "user not found")
+	}
+
+	c.JSON(403, gin.H{"error": "Forbidden"})
+	c.Abort()
+	c.Redirect(http.StatusTemporaryRedirect, "/")
+
 }
 
 func UpdateUser(c *gin.Context) {
-	var user, newData models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(400, gin.H{
-			"error": err.Error(),
-		})
+
+	type JWTToken struct {
+		TokenString string `json:"stringToken"`
+		ID          uint   `json:"id"`
+		Username    string `json:"username"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+	}
+
+	var token JWTToken
+
+	if err := c.ShouldBindBodyWith(&token, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	currentUserInterface, exists := c.Get("currentUser")
-	if !exists {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
-		c.Abort()
+	if token.TokenString == "" {
+		c.String(200, "couldnt get cookie")
 		return
 	}
 
-	currentUser, ok := currentUserInterface.(models.User)
-	if !ok {
-		c.JSON(500, gin.H{"error": "Internal Server Error"})
-		c.Abort()
+	result, err := jwt.Parse(token.TokenString, func(token *jwt.Token) (interface{}, error) {
+
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return []byte(os.Getenv("KEY")), nil
+
+	})
+
+	if err != nil {
+		c.String(200, "Token Parsing Failed")
 		return
 	}
 
-	if currentUser.ID != user.ID {
-		c.JSON(403, gin.H{"error": "Forbidden"})
-		c.Abort()
-		return
+	if claims, ok := result.Claims.(jwt.MapClaims); ok && result.Valid {
+		if float64(time.Now().Unix()) > claims["expires"].(float64) {
+			c.String(200, "Token expired")
+			return
+		}
+		var count int64
+		var currentUser models.User
+		config.DB.First(&currentUser, "id=?", claims["subject"]).Count(&count)
+
+		if count == 0 {
+			c.String(200, "User not found")
+			c.Abort()
+			c.Redirect(http.StatusTemporaryRedirect, "/")
+			return
+		}
+		c.Set("currentUser", currentUser)
+
+		var user, newData models.User
+		user.ID = token.ID
+		user.UserName = token.Username
+		user.Email = token.Email
+		user.Password = token.Password
+
+		config.DB.Where("id = ?", user.ID).First(&newData)
+
+		if currentUser.ID != newData.ID {
+			c.JSON(403, gin.H{"error": "Forbidden: You can only update your own posts"})
+			return
+		}
+
+		if newData.UserName != user.UserName && user.UserName != "" {
+			newData.UserName = user.UserName
+		} else if newData.Email != user.Email && user.Email != "" {
+			newData.Email = user.Email
+		} else if newData.Password != user.Password && user.Password != "" {
+			newData.Password = user.Password
+		}
+		config.DB.Save(&newData)
+		c.JSON(200, newData)
 	}
-	config.DB.Where("id =?", user.ID).First(&newData)
-	if newData.UserName != user.UserName && user.UserName != "" {
-		newData.UserName = user.UserName
-	} else if newData.Email != user.Email && user.Email != "" {
-		newData.Email = user.Email
-	} else if newData.Password != user.Password && user.Password != "" {
-		newData.Password = user.Password
-	}
-	config.DB.Save(&newData)
-	c.JSON(200, newData)
+
 }

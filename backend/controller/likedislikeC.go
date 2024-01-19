@@ -1,9 +1,16 @@
 package controller
 
 import (
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/PeterHW963/CVWO/backend/config"
 	"github.com/PeterHW963/CVWO/backend/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/golang-jwt/jwt"
 )
 
 func GetTotalVotesComment(c *gin.Context) {
@@ -24,21 +31,70 @@ func GetTotalVotesComment(c *gin.Context) {
 }
 
 func AddUpvoteComment(c *gin.Context) {
-	upVote := models.LikeDislikePost{}
-	var data struct {
-		PostId uint   `json:"postid"`
-		UserId uint   `json:"userid"`
-		Status string `json:"status"`
+	type JWTToken struct {
+		TokenString string `json:"stringToken"`
+		CommentId   uint   `json:"commentid"`
+		UserId      uint   `json:"userId"`
+		Status      string `json:"status"`
 	}
-	c.ShouldBindJSON(&data)
+
+	var token JWTToken
+	// c.ShouldBindJSON(&token)
+	if err := c.ShouldBindBodyWith(&token, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// fmt.Print(token.TokenString)
+	if token.TokenString == "" {
+		c.String(200, "couldnt get cookie")
+		return
+	}
+
+	result, err := jwt.Parse(token.TokenString, func(token *jwt.Token) (interface{}, error) {
+
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return []byte(os.Getenv("KEY")), nil
+
+	})
+
+	if err != nil {
+		c.String(200, "Token Parsing Failed")
+		return
+	}
+
+	if claims, ok := result.Claims.(jwt.MapClaims); ok && result.Valid {
+		if float64(time.Now().Unix()) > claims["expires"].(float64) {
+			c.String(200, "Token expired")
+			return
+		}
+		var count int64
+		var currentUser models.User
+		config.DB.First(&currentUser, "id=?", claims["subject"]).Count(&count)
+
+		if count == 0 {
+			c.String(200, "User not found")
+			c.Abort()
+			c.Redirect(http.StatusTemporaryRedirect, "/")
+			return
+		}
+		c.Set("currentUser", currentUser)
+
+	}
+
+	upVote := models.LikeDislikeComment{}
+
 	var upVoteCount int64
 
-	config.DB.Where("postid =? AND status = Up AND UserId=?", data.PostId, data.UserId).First(&upVote).Count(&upVoteCount)
+	config.DB.Where("commentid =? AND status = Up AND UserId=?", token.CommentId, token.UserId).First(&upVote).Count(&upVoteCount)
 	if upVoteCount == 0 {
-		config.DB.Create(&models.LikeDislikePost{
-			PostId: data.PostId,
-			Status: data.Status,
-			UserId: data.UserId,
+		config.DB.Create(&models.LikeDislikeComment{
+			CommentId: token.CommentId,
+			Status:    token.Status,
+			UserId:    token.UserId,
 		})
 		c.JSON(200, "Upvoted")
 		return
@@ -58,34 +114,84 @@ func AddUpvoteComment(c *gin.Context) {
 }
 
 func AddDownvoteComment(c *gin.Context) {
-	downVote := models.LikeDislikePost{}
-	var data struct {
-		PostId uint   `json:"postid"`
-		UserId uint   `json:"userid"`
-		Status string `json:"status"`
+	type JWTToken struct {
+		TokenString string `json:"stringToken"`
+		CommentId   uint   `json:"commentid"`
+		UserId      uint   `json:"userId"`
+		Status      string `json:"status"`
 	}
-	c.ShouldBindJSON(&data)
+
+	var token JWTToken
+	// c.ShouldBindJSON(&token)
+	if err := c.ShouldBindBodyWith(&token, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// fmt.Print(token.TokenString)
+	if token.TokenString == "" {
+		c.String(200, "couldnt get cookie")
+		return
+	}
+
+	result, err := jwt.Parse(token.TokenString, func(token *jwt.Token) (interface{}, error) {
+
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return []byte(os.Getenv("KEY")), nil
+
+	})
+
+	if err != nil {
+		c.String(200, "Token Parsing Failed")
+		return
+	}
+
+	if claims, ok := result.Claims.(jwt.MapClaims); ok && result.Valid {
+		if float64(time.Now().Unix()) > claims["expires"].(float64) {
+			c.String(200, "Token expired")
+			return
+		}
+		var count int64
+		var currentUser models.User
+		config.DB.First(&currentUser, "id=?", claims["subject"]).Count(&count)
+
+		if count == 0 {
+			c.String(200, "User not found")
+			c.Abort()
+			c.Redirect(http.StatusTemporaryRedirect, "/")
+			return
+		}
+		c.Set("currentUser", currentUser)
+
+	}
+
+	downVote := models.LikeDislikeComment{}
+
 	var downVoteCount int64
 
-	config.DB.Where("postid =? AND status = Down AND UserId=?", data.PostId, data.UserId).First(&downVote).Count(&downVoteCount)
+	config.DB.Where("commentid =? AND status = Down AND UserId=?", token.CommentId, token.UserId).First(&downVote).Count(&downVoteCount)
 	if downVoteCount == 0 {
-		config.DB.Create(&models.LikeDislikePost{
-			PostId: data.PostId,
-			Status: data.Status,
-			UserId: data.UserId,
+		config.DB.Create(&models.LikeDislikeComment{
+			CommentId: token.CommentId,
+			Status:    token.Status,
+			UserId:    token.UserId,
 		})
 		c.JSON(200, "Downvoted")
 		return
 	}
 
-	if downVote.Status == "Up" {
+	if downVote.Status == "Down" {
 		config.DB.Delete(&downVote)
 		c.JSON(200, "Downvote Removed")
 		return
 	}
 
-	downVote.Status = "Up"
+	downVote.Status = "Down"
 
 	config.DB.Save(&downVote)
 	c.JSON(200, "Downvoted")
+
 }

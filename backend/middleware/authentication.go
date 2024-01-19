@@ -9,6 +9,7 @@ import (
 	"github.com/PeterHW963/CVWO/backend/config"
 	"github.com/PeterHW963/CVWO/backend/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/golang-jwt/jwt"
 )
 
@@ -19,7 +20,11 @@ func Authentication(c *gin.Context) {
 	}
 
 	var token JWTToken
-	c.ShouldBindJSON(&token)
+	// c.ShouldBindJSON(&token)
+	if err := c.ShouldBindBodyWith(&token, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// fmt.Print(token.TokenString)
 	if token.TokenString == "" {
@@ -58,7 +63,7 @@ func Authentication(c *gin.Context) {
 			return
 		}
 		c.Set("currentUser", currentUser)
-
+		// fmt.Println(currentUser)
 		c.Next()
 	}
 

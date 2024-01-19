@@ -2,7 +2,7 @@ import React from "react";
 import "./Account.css";
 
 interface AccountInfo {
-  username: string;
+  username?: string;
 }
 
 export default function Account(props: AccountInfo) {
